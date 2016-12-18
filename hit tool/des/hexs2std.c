@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+
 #include "code2x.h"
 
 ///
@@ -21,7 +22,7 @@ char *hexs_to_std(const char *src)
 	}
 
 	int len = 0, slen = 0;	//nlen:源长度 len：填充后标准长度
-	char *stdsrc = NULL, ch = '\0', *srcasc = NULL;
+	char *stdsrc = NULL, ch = '\0', *srcasc = NULL, *stdhex = NULL;
 
 	srcasc = hexs_to_ascs(src);
 	slen = strlen(srcasc);
@@ -40,8 +41,13 @@ char *hexs_to_std(const char *src)
 
 	memset(stdsrc + slen, ch, 8 - slen % 8);
 	stdsrc[len] = '\0';
-	free(srcasc);
+	
 
-	return stdsrc;
+	stdhex = ascs_to_hexs(stdsrc);
+
+	free(srcasc);
+	free(stdsrc);
+	
+	return stdhex;
 
 }

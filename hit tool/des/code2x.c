@@ -1,9 +1,8 @@
-#include "code2x.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+typedef unsigned char uint8_t;
 //
 //	File:	code2x.c: ASCII码字符串到十六进制以及二进制字符串的转换实现
 //
