@@ -9,22 +9,23 @@
 //
 int main()
 {
-	char *str = "I love China very much!";
+	char *str = "key is your birthday aaa ";
 	char *key = "abcdefg";
 	char *ds = NULL;
-	char *hh = NULL;
+	char *h1 = NULL;
+	char *h2 = NULL;
 	char *hexstr = NULL;
 	int i = 1;
 
-	printf("before encrypt: %s %s\n", ascs_to_hexs(str), str);
-	hh = DES_encrypt(str, key);
-	
-	printf("after encrypto: %s %s\n", ascs_to_hexs(hh), hh);
-	hh = DES_decrypt(hh, key);
+	printf("before encrypt:%d %s\n",strlen(str), str);
+	h1 = DES_encrypt(str, key);
 
-	printf("after decrypto: %s %s\n" ,ascs_to_hexs(hh), hh);
+	printf("after encrypto:%d %s\n", strlen(h1), h1);
+	h2 = DES_decrypt(h1, key);
 
-	hexstr = ascs_to_hexs(hh);
+	printf("after decrypto:%d %s\n" ,strlen(h2), h2);
+
+	hexstr = ascs_to_hexs(h2);
 
 	while(hexstok(hexstr, i ,4) != NULL)
 	{
@@ -33,7 +34,8 @@ int main()
 		i+=4;
 	}
 
-	free(hh);
+	free(h1);
+	free(h2);
 	free(hexstr);
 	free(ds);
 

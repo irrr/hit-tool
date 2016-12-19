@@ -3,10 +3,10 @@
 #include <string.h>
 #include <openssl/des.h>
 
-#include "hexs2std.h"
+#include "ascs2std.h"
 #include "code2x.h"
 ///
-///     DES-ECB加密 gcc -Wall -O2 -o openssl_des openssl_des.c hexs2std.c code2x.c -lcrypto
+///     DES-ECB加密 gcc -Wall -O2 -o openssl_des openssl_des.c ascs2std.c code2x.c -lcrypto
 ///
 
 /*
@@ -22,12 +22,13 @@ char *openssl_des(const char *src, const char *key, int enc)
 	char *dst = NULL, out[8], *tmp = NULL, *stmp = NULL;
 	int cunt = 0;
 	
-	tmp = (char *)malloc(sizeof(char) * 16);
+	tmp = (char *)malloc(sizeof(char) * 16 + 1);
 	if(tmp == NULL)
 	{
 		return NULL;
 	}
-	
+	memset(tmp, 0, sizeof(char) * 16 + 1);
+
 	cunt = strlen(src) / 16;
 	//根据字符串生成key
 	DES_string_to_key(key, &ky);
@@ -35,11 +36,12 @@ char *openssl_des(const char *src, const char *key, int enc)
 	//设置密码表
 	DES_set_key_unchecked(&ky, &ks);
 	
-	dst = (char *)malloc(sizeof(char) * cunt * 8);
+	dst = (char *)malloc(sizeof(char) * cunt * 8 + 1);
 	if(dst == NULL)
 	{
 		return NULL;
 	}
+	memset(dst, 0, sizeof(char) * cunt * 8 + 1);
 	
 	if(enc == DES_ENCRYPT)
 	{
@@ -53,7 +55,6 @@ char *openssl_des(const char *src, const char *key, int enc)
 			memcpy(dst + 8 * i, out, 8);
 			free(stmp);
 		}
-		dst[cunt * 8] = '\0';
 	}
 	else
 	{
@@ -66,7 +67,6 @@ char *openssl_des(const char *src, const char *key, int enc)
 			memcpy(dst + 8 * i, out, 8);
 			free(stmp);
 		}
-		dst[cunt * 8] = '\0';
 	}
 	free(tmp);
 	return dst;
@@ -79,17 +79,15 @@ char *openssl_des(const char *src, const char *key, int enc)
  */
 char *DES_encrypt(const char *src, const char *key)
 {
-	char *hexs = NULL, *dst = NULL, *stdhex = NULL;
+	char *dst = NULL, *stdhex = NULL, *stdsrc = NULL;
 
-	//get hex data string
-	hexs = ascs_to_hexs(src);
-	
-	//get padding hex data string
-	stdhex = hexs_to_std(hexs);
+	stdsrc = ascs_to_std(src);
+	//get padding data string
+
+	stdhex = ascs_to_hexs(stdsrc);
 
 	dst = openssl_des(stdhex, key, DES_ENCRYPT);
-	
-	free(hexs);
+
 	free(stdhex);
 	
 	return dst;
@@ -102,18 +100,17 @@ char *DES_encrypt(const char *src, const char *key)
  */
 char *DES_decrypt(const char *src, const char *key)
 {
-	char *hexs = NULL, *dst = NULL, *stdhex = NULL;
+	char *stdsrc = NULL, *dst = NULL, *stdhex = NULL;
 	int len = 0;
+
+	stdsrc = ascs_to_std(src);
 	
-	//get hex data
-	hexs = ascs_to_hexs(src);
-	
-	//get padding hex data
-	stdhex = hexs_to_std(hexs);
+	//get padding data
+	stdhex = ascs_to_hexs(stdsrc);
 
 	//des decrypt
 	dst = openssl_des(stdhex, key, DES_DECRYPT);
-	
+
 	len = strlen(dst);
 
 	//decode padding
@@ -132,7 +129,6 @@ char *DES_decrypt(const char *src, const char *key)
 	}
 
 	//free sources
-	free(hexs);
 	free(stdhex);
 	
 	return dst;

@@ -16,12 +16,18 @@ char *hexstok(const char *src, int left, int cunt)
 	{
 		return NULL;
 	}
-	else if(len - left + 1 < cunt)
-	{
-		ncunt = len - left + 1;
-	}
+	
 
-	ds = (char *)malloc(ncunt);
+	ds = (char *)malloc(sizeof(char) * ncunt + 1);
+	memset(ds, '0', sizeof(char) * ncunt);
+
+	if(len - left + 1 < cunt)
+	{
+		for(int i = 0; i < cunt - len + left -1; i++)
+		{
+			ds[k++] = '0';
+		}
+	}
 
 	for(int i = 0; i < ncunt; i++)
 	{

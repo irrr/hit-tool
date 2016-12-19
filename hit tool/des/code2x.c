@@ -83,19 +83,18 @@ char *ascs_to_hexs(const char *src)
 	}
 
 	int datasize = 0, buffsize = 0;
-	char *dst;
+	char *dst = NULL;
 
 	datasize = strlen(src);
+
+
 	buffsize = 2 * datasize;	//按照GBK编码，字符串转十六进制长度会变成原来两倍
 
-	dst = (char *)malloc(sizeof(char)*buffsize + 1);
-	memset(dst,0,sizeof(char)*buffsize + 1);
-
-	dst[buffsize + 1] = '\0';	//结尾添加结束符
-
+	dst = (char *)malloc(sizeof(char) * buffsize + 1);
+	memset(dst,0,sizeof(char) * buffsize + 1);
 	if (dst != NULL)
 	{
-		for (int i = 0; 0 != src[i]; i++)
+		for (int i = 0; i < datasize; i++)
 		{
 			sprintf(dst + i * 2, "%02x", (unsigned char)src[i]);
 		}
@@ -235,15 +234,14 @@ char *hexs_to_ascs(const char *src)
 	}
 
 	int datasize = 0, buffsize = 0, tmp = 0, i = 0;
-	char *dst;
+	char *dst = NULL;
 
 	datasize = strlen(src);
 	buffsize = datasize / 2;	//GBK编码，十六进制转字符长度减一半
 
-	dst = (char *)malloc(sizeof(char)*buffsize + 1);
-	memset(dst, 0, sizeof(char)*buffsize + 1);
 
-	dst[buffsize + 1] = '\0';	//结尾添加结束符
+	dst = (char *)malloc(sizeof(char)*buffsize + 1);
+	memset(dst, 0, sizeof(char) * buffsize + 1);
 
 	if (dst != NULL)
 	{
@@ -252,6 +250,7 @@ char *hexs_to_ascs(const char *src)
 			sscanf(src + i*2, "%2x", &tmp);
 			dst[i] = (char)tmp;
 		}
+
 		return dst;
 	}
 	else return NULL;

@@ -1,6 +1,6 @@
 #ifndef DES_H
 #define DES_H
-#include "hexs2std.h"
+#include "ascs2std.h"
 #include "code2x.h"
 ///
 ///	File:	des.h:  functions about des encrypt and decrypt
