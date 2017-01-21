@@ -26,7 +26,6 @@ int main()
 	printf("after decrypto:%d %s\n" ,strlen(h2), h2);
 
 	hexstr = ascs_to_hexs(h2);
-
 	while(hexstok(hexstr, i ,4) != NULL)
 	{
 		ds = hexstok(hexstr, i, 4);

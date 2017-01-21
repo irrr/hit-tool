@@ -1,5 +1,5 @@
-#include "code2x.h"
-#include "hexstok.h"
+#include "../des/code2x.h"
+#include "../des/hexstok.h"
 
 #include <stdio.h>
 #include <stdlib.h>
