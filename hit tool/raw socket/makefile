@@ -1,0 +1,11 @@
+all:	
+	client.c ../des/code2x.c ../des/hexstok.c server.c
+client:
+	gcc -Wall -o client client.c ../des/code2x.c ../des/hexstok.c
+server:
+	gcc -Wall -o server server.c	
+run:
+	./raw
+clean:	
+	rm -f client
+	rm -f server
