@@ -14,10 +14,37 @@
 #define TCP_HEADER_LEN sizeof(struct tcphdr)
 /* ip首部 + tcp首部长度 */
 #define IP_TCP_HEADER_LEN IP_HEADER_LEN + TCP_HEADER_LEN
-/* 接收数据缓冲大小 */
-#define BUFFER_SIZE 2048
+/* 数据缓冲大小 */
+#define BUFFER_SIZE 140
 /* ip首部 + tcp首部 + 数据缓冲区大小 */
-#define IP_TCP_BUFF_SIZE IP_TCP_HEADER_LEN + BUFFER_SIZE
+#define IP_TCP_BUFF_SIZE IP_TCP_HEADER_LEN + BUFFER_SIZE * 10
+#define FRAG_SIZE 5
+
+typedef struct
+{
+	int frag_id;
+	unsigned int data;
+}datarray;
+
+typedef struct ip iphd;
+typedef struct tcphdr tcphd;
+
+
+void err_exit(const char *err_msg);
+void listen_msg();
+void print_msg(char *ip, datarray *data);
+char *digit_to_hexs(const int num);
+
+char *digit_to_hexs(const int num)
+{
+	char *hexstr = (char *)malloc(sizeof(char) * FRAG_SIZE);
+	memset(hexstr, 0, FRAG_SIZE);
+
+	snprintf(hexstr, FRAG_SIZE, "%04x", num);
+
+	return hexstr;
+}
+
 
 void err_exit(const char *err_msg)
 {
@@ -25,145 +52,76 @@ void err_exit(const char *err_msg)
     exit(1);
 }
 
-/* 填充ip首部 */
-struct ip *fill_ip_header(const char *src_ip, const char *dst_ip, int ip_packet_len)
+void print_msg(char *ip, datarray *datarray)
 {
-    struct ip *ip_header;
+	char msg[BUFFER_SIZE] = {0};
+	char *tmp = NULL;
 
-    ip_header = (struct ip *)malloc(IP_HEADER_LEN);
-    ip_header->ip_v = IPVERSION;
-    ip_header->ip_hl = sizeof(struct ip) / 4;        /* 这里注意，ip首部长度是指占多个32位的数量，4字节=32位，所以除以4 */
-    ip_header->ip_tos = 0;
-    ip_header->ip_len = htons(ip_packet_len);        /* 整个IP数据报长度，包括普通数据 */
-    ip_header->ip_id = 0;                            /* 让内核自己填充标识位 */
-    ip_header->ip_off = 0;
-    ip_header->ip_ttl = MAXTTL;
-    ip_header->ip_p = IPPROTO_TCP;                   /* ip包封装的协议类型 */
-    ip_header->ip_sum = 0;                           /* 让内核自己计算校验和 */
-    ip_header->ip_src.s_addr = inet_addr(src_ip);    /* 源IP地址 */
-    ip_header->ip_dst.s_addr = inet_addr(dst_ip);    /* 目标IP地址 */
+	for(int i = 0; datarray[i].frag_id > 0; i++)
+	{
+		tmp = digit_to_hexs(datarray[i].data);
+		strncat(msg, tmp, strlen(tmp));
+	}
 
-    return ip_header;
-}
+	printf("%s:%s\n", ip, msg);
 
-/* 填充tcp首部 */
-struct tcphdr *fill_tcp_header(int src_port, int dst_port)
-{
-    struct tcphdr *tcp_header;
-
-    tcp_header = (struct tcphdr *)malloc(TCP_HEADER_LEN);
-    tcp_header->source = htons(src_port); 
-    tcp_header->dest = htons(dst_port);
-    /* 同IP首部一样，这里是占32位的字节多少个 */
-    tcp_header->doff = sizeof(struct tcphdr) / 4;
-    /* 发起连接 */
-    tcp_header->syn = 1;
-    tcp_header->window = 4096;
-    tcp_header->check = 0;
-
-    return tcp_header;
-}
-
-/* 发送ip_tcp报文 */
-void ip_tcp_send(const char *src_ip, int src_port, const char *dst_ip, int dst_port, const char *data)
-{
-    struct ip *ip_header;
-    struct tcphdr *tcp_header;
-    struct sockaddr_in dst_addr;
-    socklen_t sock_addrlen = sizeof(struct sockaddr_in);
-
-    int data_len = strlen(data);
-    int ip_packet_len = IP_TCP_HEADER_LEN + data_len;
-    char buf[ip_packet_len];
-    int sockfd, ret_len, on = 1;
-
-    bzero(&dst_addr, sock_addrlen);
-    dst_addr.sin_family = PF_INET;
-    dst_addr.sin_addr.s_addr = inet_addr(dst_ip);
-    dst_addr.sin_port = htons(dst_port);
-
-    /* 创建tcp原始套接字 */
-    if ((sockfd = socket(PF_INET, SOCK_RAW, IPPROTO_TCP)) == -1)
-        err_exit("socket()");
-
-    /* 开启IP_HDRINCL，自定义IP首部 */
-    if (setsockopt(sockfd, IPPROTO_IP, IP_HDRINCL, &on, sizeof(on)) == -1)
-        err_exit("setsockopt()");
-
-    /* ip首部 */
-    ip_header = fill_ip_header(src_ip, dst_ip, ip_packet_len);
-    /* tcp首部 */
-    tcp_header = fill_tcp_header(src_port, dst_port);
-
-    bzero(buf, ip_packet_len);
-    memcpy(buf, ip_header, IP_HEADER_LEN);
-    memcpy(buf + IP_HEADER_LEN, tcp_header, TCP_HEADER_LEN);
-    memcpy(buf + IP_TCP_HEADER_LEN, data, data_len);
-
-    /* 发送报文 */
-    ret_len = sendto(sockfd, buf, ip_packet_len, 0, (struct sockaddr *)&dst_addr, sock_addrlen);
-    if (ret_len > 0)
-        printf("sendto() ok!!!\n");
-    else printf("sendto() failed\n");
-
-    close(sockfd);
-    free(ip_header);
-    free(tcp_header);
 }
 
 /* 原始套接字接收 */
-void raw_socket_recv()
+void listen_msg()
 {
-    struct ip *ip_header;
-    struct tcphdr *tcp_header;
-    int sock_raw_fd, ret_len;
+    iphd *ip_header;
+    tcphd *tcp_header;
+    int recvfd, ret_len, i = 0;
+    datarray data[BUFFER_SIZE / 4]={0};	//32bits == 4bytes 
+    char ip[15];
     char buf[IP_TCP_BUFF_SIZE];
 
-    if ((sock_raw_fd = socket(PF_INET, SOCK_RAW, IPPROTO_TCP)) == -1)
+    if ((recvfd = socket(AF_INET, SOCK_RAW, IPPROTO_TCP)) == -1)
+    {
         err_exit("socket()");
+    }
 
+    printf("Listen...\n");
     /* 接收数据 */
     while (1)
     {
-        bzero(buf, IP_TCP_BUFF_SIZE);
-        ret_len = recv(sock_raw_fd, buf, IP_TCP_BUFF_SIZE, 0);
+        memset(buf, 0, IP_TCP_BUFF_SIZE);
+        ret_len = recv(recvfd, buf, IP_TCP_BUFF_SIZE, 0);
         if (ret_len > 0)
         {
-            /* 取出ip首部 */
-            ip_header = (struct ip *)buf;
+        	snprintf(ip, sizeof(ip), "%s", inet_ntoa(ip_header -> ip_src));
+
+        	ip_header = (struct ip *)buf;
             /* 取出tcp首部 */
             tcp_header = (struct tcphdr *)(buf + IP_HEADER_LEN);
-            printf("=======================================\n");
-            printf("from ip:%s\n", inet_ntoa(ip_header->ip_src));
-            printf("from port:%d\n", ntohs(tcp_header->source));
-	    printf("the data is %s\n",buf + IP_TCP_HEADER_LEN);
-	    printf("=======================================\n");
-            /* 取出数据 */
-	    const char *split = ","; //分隔符可以定义多个
-	    char *numble;
-	    int res = 0;
-	    numble = strtok(buf + IP_TCP_HEADER_LEN, split);
-	    while (numble != NULL ) {
-	    	res += atoi(numble);
-	    	numble = strtok(NULL , split);
-	    }
-	    char resBuffer[100];
-	    bzero(resBuffer,100);
-	    sprintf(resBuffer, "%d", res);
-            //
-	    ip_tcp_send(inet_ntoa(ip_header->ip_dst), ntohs(tcp_header->dest), inet_ntoa(ip_header->ip_src),ntohs(tcp_header->source), resBuffer);
-	    printf("The result is %s\n sended back!\n",resBuffer);
-	    break;
+
+            if(ntohs(tcp_header->dest) == 6666)
+            {
+            	data[i].frag_id = ip_header -> ip_id;
+            	data[i].data = tcp_header -> seq;
+            	i++;
+       //      	printf("=======================================\n");
+       //      	printf("from ip:%s\n", inet_ntoa(ip_header->ip_src));
+       //      	printf("from port:%d\n", ntohs(tcp_header->source));
+	    		// printf("the ID is %d\n",ip_header->ip_id);
+	    		// printf("the data is %d\n",tcp_header->seq);
+	    		// printf("=======================================\n");
+            }
+        }
+        else
+        {
+        	print_msg(ip, data);
         }
     }
     
-    close(sock_raw_fd);
+    close(recvfd);
 }
 
 int main(void)
 {
     /* 原始套接字接收 */
-    raw_socket_recv();
+    listen_msg();
 
     return 0;
 }

@@ -12,21 +12,16 @@
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 
+#define PORT 6666
 
-//16位数据长度
-#define DATA_16_LEN 2
 //盐信息长度
-#define MIX_DATA_LEN 10
+#define MIX_DATA_LEN 1400
 //ip首部长度
 #define IP_HEADER_LEN sizeof(struct ip)
 //tcp首部长度
 #define TCP_HEADER_LEN sizeof(struct tcphdr)
 //ip首部 + tcp首部长度
 #define IP_TCP_HEADER_LEN IP_HEADER_LEN + TCP_HEADER_LEN
-//接收数据缓冲大小
-#define BUFFER_SIZE 2048
-//ip首部 + tcp首部 + 数据缓冲区大小
-#define IP_TCP_BUFF_SIZE IP_TCP_HEADER_LEN + BUFFER_SIZE
 
 struct hdata
 {
@@ -51,15 +46,16 @@ struct pseudohdr
 
 ////////////////////////////////////////////////////////////////////
 void err_exit(const char *err_msg);
-void init_hdata(const char *data, h_data *hdata, int id);
+int init_hdata(const char *data, h_data *hdata, int id);
 
 iphd *init_ip_header(const char *src_ip, const char *dst_ip);
 void fill_ip_header(iphd *ip_header, int ip_packet_len, int id);
 
 tcphd *init_tcp_header(int src_port, int dst_port);
-void fill_tcp_header(iphd *iphdr, tcphd *tcp_header, char *data);
+void fill_tcp_header(iphd *iphdr, tcphd *tcp_header, unsigned int t_data);
 
-void send_msg(const char *src_ip, int src_port, const char *dst_ip, int dst_port, const char *data);
+void send(const char *src_ip,const int src_port, const char *dst_ip,const int dst_port, const char *data);
+void send_msg(const char *src_ip,const int src_port, const char *dst_ip,const int dst_port, const char *data);
 u_short checksum(u_short *data, u_short length);
 ////////////////////////////////////////////////////////////////////
 
@@ -89,7 +85,7 @@ u_short checksum(u_short *data, u_short length)
 }
 
 
-void init_hdata(const char *data, h_data *hdata, int id)
+int init_hdata(const char *data, h_data *hdata, int id)
 {
 	char mix_data[MIX_DATA_LEN];
 
@@ -105,6 +101,7 @@ void init_hdata(const char *data, h_data *hdata, int id)
 	strncpy(hdata -> m_data, mix_data, time + 1);
 	hdata -> frag_id = id;
 
+    return time;
 }
 
 //ip首部
@@ -119,7 +116,7 @@ iphd *init_ip_header(const char *src_ip, const char *dst_ip)
     	return NULL;
     }
 
-	bzero(ip_header, IP_HEADER_LEN);
+	memset(ip_header, 0, IP_HEADER_LEN);
 
     ip_header->ip_v = IPVERSION;
     ip_header->ip_hl = IP_HEADER_LEN / 4;        ///ip首部长度是指占多个32位的数量，4字节=32位，所以除以4
@@ -165,9 +162,9 @@ tcphd *init_tcp_header(int src_port, int dst_port)
     return tcp_header;
 }
 
-void fill_tcp_header(iphd *iphdr, tcphd *tcp_header, char *data)
+void fill_tcp_header(iphd *iphdr, tcphd *tcp_header, unsigned int t_data)
 {
-	tcp_header->seq = strtol(data, NULL, 16); //填充隐蔽信息
+	tcp_header->seq = t_data; //填充隐蔽信息
 
 	//填充伪首部信息， 用于计算tcp首部校验和
     memset(&pseudoheader, 0, 12 + TCP_HEADER_LEN);
@@ -182,7 +179,7 @@ void fill_tcp_header(iphd *iphdr, tcphd *tcp_header, char *data)
 }
 
 /* 发送构造的隐蔽信息报文 */
-void send_msg(const char *src_ip, int src_port, const char *dst_ip, int dst_port, const char *data)
+void send(const char *src_ip,const int src_port, const char *dst_ip,const int dst_port, const char *data)
 {
 ///////////////////////////////////////////////////////////////////////
     iphd *ip_header;
@@ -190,16 +187,15 @@ void send_msg(const char *src_ip, int src_port, const char *dst_ip, int dst_port
     struct sockaddr_in dst_addr;
     char *frag = NULL;
     h_data hdata;
-    int failed = 0, i = 1;
+    int failed = 0, i = 1, mdata_len;
 
     socklen_t sock_addrlen = sizeof(struct sockaddr_in);
 
     
     int ip_packet_len;                //总的数据包首部+数据的长度
-    ip_packet_len = IP_TCP_HEADER_LEN + MIX_DATA_LEN;
-    char buf[ip_packet_len];
+    char msg_buf[IP_TCP_HEADER_LEN + MIX_DATA_LEN];
 
-    int sockfd, ret_len, on = 1, id = 0;  //id用于信息分割后的分片重组，填充在ip首部的id位
+    int sockfd, ret_len, on = 1, id = 1;  //id用于信息分割后的分片重组，填充在ip首部的id位
     char *hexstr = NULL;                 
     
     memset(&dst_addr, 0, sock_addrlen);
@@ -208,7 +204,7 @@ void send_msg(const char *src_ip, int src_port, const char *dst_ip, int dst_port
     dst_addr.sin_port = htons(dst_port);
 
     /* 创建tcp原始套接字 */
-    if ((sockfd = socket(PF_INET, SOCK_RAW, IPPROTO_TCP)) == -1)
+    if ((sockfd = socket(AF_INET , SOCK_RAW, IPPROTO_TCP)) == -1)
     {
         err_exit("socket()");
     }
@@ -234,29 +230,30 @@ void send_msg(const char *src_ip, int src_port, const char *dst_ip, int dst_port
     {
     	err_exit("tcp_header()");
     }
-
-    bzero(buf, ip_packet_len);
-    memcpy(buf, ip_header, IP_HEADER_LEN);
-    memcpy(buf + IP_HEADER_LEN, tcp_header, TCP_HEADER_LEN);
 ////////////////////////////////////////////////////////////////////////
     hexstr = ascs_to_hexs(data);
-    while(hexstok(hexstr, i ,8) != NULL)
+    frag = hexstok(hexstr, i, 8);
+    while(frag != NULL)
 	{
-
-		frag = hexstok(hexstr, i, 8);
-
-		init_hdata(frag, &hdata, id++);
+		mdata_len = init_hdata(frag, &hdata, id);
+        printf("mdata_len:%d\n", mdata_len);
+        ip_packet_len = IP_TCP_HEADER_LEN + mdata_len + 1;
 
 		fill_ip_header(ip_header, ip_packet_len, hdata.frag_id);
-		fill_tcp_header(ip_header, tcp_header, frag);
+		fill_tcp_header(ip_header, tcp_header, hdata.t_data);
 
-		memcpy(buf + IP_TCP_HEADER_LEN, hdata.m_data, MIX_DATA_LEN);
+        memset(msg_buf, 0, ip_packet_len);
+        memcpy(msg_buf, ip_header, IP_HEADER_LEN);
+        memcpy(msg_buf + IP_HEADER_LEN, tcp_header, TCP_HEADER_LEN);
+		memcpy(msg_buf + IP_TCP_HEADER_LEN, hdata.m_data, mdata_len + 1);
+
+        printf("ip_header->ip_id=%d\n", ip_header->ip_id);
+        printf("tcp_header->seq=%d\n", tcp_header->seq);
 		/* 发送报文 */
-		ret_len = sendto(sockfd, buf, ip_packet_len, 0, (struct sockaddr *)&dst_addr, sock_addrlen);
+		ret_len = sendto(sockfd, msg_buf, ip_packet_len, 0, (struct sockaddr *)&dst_addr, sock_addrlen);
 		if (ret_len > 0)
 		{
-			printf("Frag %d sendto() ok!!!\n", hdata.frag_id);
-            printf("%d %s\n", hdata.t_data, hdata.m_data);
+			printf("Frag %d sendto() ok!!!\n\n", hdata.frag_id);
 		}
 		else 
 		{
@@ -265,7 +262,9 @@ void send_msg(const char *src_ip, int src_port, const char *dst_ip, int dst_port
 		}
 
 		i+=8;
+        id++;
 		free(frag);
+        frag = hexstok(hexstr, i, 8);
 	}
 
 	if(!failed)
@@ -276,10 +275,6 @@ void send_msg(const char *src_ip, int src_port, const char *dst_ip, int dst_port
 	{
 		err_exit("sendto()");
 	}
-
-
-
-
 
     // char buff[IP_TCP_BUFF_SIZE];
     // while (1)
