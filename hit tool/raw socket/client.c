@@ -54,7 +54,7 @@ void fill_ip_header(iphd *ip_header, int ip_packet_len, int id);
 tcphd *init_tcp_header(int src_port, int dst_port);
 void fill_tcp_header(iphd *iphdr, tcphd *tcp_header, unsigned int t_data);
 
-void send(const char *src_ip,const int src_port, const char *dst_ip,const int dst_port, const char *data);
+void send_t(const char *src_ip,const int src_port, const char *dst_ip,const int dst_port, const char *data);
 void send_msg(const char *src_ip,const int src_port, const char *dst_ip,const int dst_port, const char *data);
 u_short checksum(u_short *data, u_short length);
 ////////////////////////////////////////////////////////////////////
@@ -87,6 +87,11 @@ u_short checksum(u_short *data, u_short length)
 
 int init_hdata(const char *data, h_data *hdata, int id)
 {
+	if(data == NULL || hdata == NULL)
+	{
+		return 0;
+	}
+
 	char mix_data[MIX_DATA_LEN];
 
 	int time = rand() % MIX_DATA_LEN;
@@ -179,7 +184,7 @@ void fill_tcp_header(iphd *iphdr, tcphd *tcp_header, unsigned int t_data)
 }
 
 /* 发送构造的隐蔽信息报文 */
-void send(const char *src_ip,const int src_port, const char *dst_ip,const int dst_port, const char *data)
+void send_t(const char *src_ip,const int src_port, const char *dst_ip,const int dst_port, const char *data)
 {
 ///////////////////////////////////////////////////////////////////////
     iphd *ip_header;
@@ -253,7 +258,7 @@ void send(const char *src_ip,const int src_port, const char *dst_ip,const int ds
 		ret_len = sendto(sockfd, msg_buf, ip_packet_len, 0, (struct sockaddr *)&dst_addr, sock_addrlen);
 		if (ret_len > 0)
 		{
-			printf("Frag %d sendto() ok!!!\n\n", hdata.frag_id);
+			printf("Frag %d sent!\n\n", hdata.frag_id);
 		}
 		else 
 		{
@@ -265,11 +270,27 @@ void send(const char *src_ip,const int src_port, const char *dst_ip,const int ds
         id++;
 		free(frag);
         frag = hexstok(hexstr, i, 8);
+
 	}
 
 	if(!failed)
 	{
-		printf("All frag sendto() ok!!!\n");
+		mdata_len = init_hdata("ffff", &hdata, id);
+	    ip_packet_len = IP_TCP_HEADER_LEN + mdata_len + 1;
+	        
+		fill_ip_header(ip_header, ip_packet_len, hdata.frag_id);
+		fill_tcp_header(ip_header, tcp_header, 1);
+
+        memset(msg_buf, 0, ip_packet_len);
+        memcpy(msg_buf, ip_header, IP_HEADER_LEN);
+        memcpy(msg_buf + IP_HEADER_LEN, tcp_header, TCP_HEADER_LEN);
+		memcpy(msg_buf + IP_TCP_HEADER_LEN, hdata.m_data, mdata_len + 1);
+		/* 发送报文 */
+		ret_len = sendto(sockfd, msg_buf, ip_packet_len, 0, (struct sockaddr *)&dst_addr, sock_addrlen);
+		if(ret_len > 0)
+		{
+			printf("All frags sent!\n");
+		}
 	}
 	else 
 	{
@@ -311,7 +332,7 @@ int main(int argc, const char *argv[])
     }
     srand((unsigned)time(0)); //用时间做种，每次产生随机数不一样
     /* 发送ip_tcp报文 */
-    send_msg(argv[1], atoi(argv[2]), argv[3], atoi(argv[4]), argv[5]);
+    send_t(argv[1], atoi(argv[2]), argv[3], atoi(argv[4]), argv[5]);
     
     return 0;
 }
